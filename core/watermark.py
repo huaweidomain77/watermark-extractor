@@ -13,8 +13,7 @@ from core.text_regions import _extract_text_regions_multi
 MIN_WATERMARK_PIXELS = 100
 
 
-def isolate_watermark_image(image_bytes, dilate_size=1, debug=False,
-                            save_debug=False, debug_name=None):
+def isolate_watermark_image(image_bytes, dilate_size=1, debug=False):
     """
     Intersects red-mask (HSV strict) with MSER text-region mask. Keeps
     only pixels that are BOTH red AND text-shaped. Then crops to the
@@ -53,20 +52,10 @@ def isolate_watermark_image(image_bytes, dilate_size=1, debug=False,
     y1 = min(out_img.height - 1, y1 + 10)
     x1 = min(out_img.width - 1, x1 + 10)
     out_img = out_img.crop((x0, y0, x1, y1))
-
-    # DEBUG: save isolated watermark before upscaling.
-    # Off by default, and given a unique name per call, because a
-    # fixed shared filename collides when multiple images are
-    # processed concurrently (each thread would overwrite the same
-    # file mid-write). Pass save_debug=True + a distinct debug_name
-    # for manual single-image debugging only.
-    if save_debug:
-        try:
-            name = debug_name or f"debug_isolated_watermark_{id(image_bytes)}.png"
-            out_img.save(name)
-            print(f"  🖼️ DEBUG isolated watermark saved: {name}")
-        except Exception as e:
-            print(f"  ⚠️ Could not save debug image: {e}")
+    # DEBUG: save isolated watermark before upscaling
+    debug_path = "debug_isolated_watermark.png"
+    out_img.save(debug_path)
+    print(f"  🖼️ DEBUG isolated watermark saved: {debug_path}")
 
     # 3x upscale
     out_img = out_img.resize((out_img.width * 3, out_img.height * 3),
