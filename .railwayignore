@@ -1,0 +1,25 @@
+# Secrets
+.env
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Notebook / Colab junk
+.ipynb_checkpoints/
+
+# Outputs
+extracted_data.csv
+extracted_data.xlsx
+validated_output.xlsx
+
+# Images (don't commit user uploads)
+images/
+test_images/
+
+# OS
+.DS_Store
+Thumbs.db

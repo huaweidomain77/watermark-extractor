@@ -22,6 +22,7 @@ Important:
 import os
 import re
 import json
+import time
 import base64
 
 from openai import OpenAI
@@ -680,8 +681,17 @@ def _call_model_once(
                 f"{error_text}"
             )
 
-            # Retry transient/rate-limit errors.
+            # Retry transient/rate-limit errors, but back off first.
+            # Without this, several threads that hit a rate limit at
+            # the same moment would all retry immediately together,
+            # making the rate limit worse instead of better.
             if rl_attempt < max_rate_limit_retries - 1:
+                is_rate_limit = (
+                    "429" in error_text
+                    or "rate_limit" in error_text.lower()
+                )
+                wait = (3 if is_rate_limit else 1) * (rl_attempt + 1)
+                time.sleep(wait)
                 continue
 
             return None, "api_error"
