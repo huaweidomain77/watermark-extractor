@@ -3,6 +3,9 @@ core/extractor.py
 
 Main watermark extraction orchestrator.
 
+Now powered by local Tesseract OCR instead of OpenAI's vision API --
+no API key, no network calls, no per-image cost.
+
 Important behavior:
 
 - Every image is processed independently.
@@ -29,11 +32,9 @@ from utils.helpers import (
     truncate_to_8_decimals,
 )
 
-from core.openai_client import (
-    _call_model_once,
-    RAW_CROP_PROMPT,
-    validate_extraction,
-)
+from core.tesseract_client import extract_from_image
+
+from core.validation import validate_extraction
 
 from core.corners import (
     find_watermark_corner,
@@ -399,15 +400,13 @@ def _try_rotations(
 
         t_call = time.time()
 
-        data, reason = _call_model_once(
+        data, reason = extract_from_image(
             isolated_png_bytes,
-            filename,
-            deg,
-            max_tokens=4000,
+            degrees=deg,
         )
 
         print(
-            f"      ⏱️ model call took "
+            f"      ⏱️ OCR call took "
             f"{time.time() - t_call:.2f}s"
         )
 
@@ -450,58 +449,10 @@ def _verify_extraction(
     first_result,
 ):
     """
-    Make an independent second vision call.
+    Make an independent second OCR pass.
 
     Used when the first result is suspicious.
     """
-
-    verification_prompt = r"""
-VERIFY THE WATERMARK AGAIN.
-
-This is a second independent reading.
-
-Do NOT trust the previous extraction.
-
-Read the CURRENT IMAGE again from the actual red/orange
-watermark.
-
-The fixed line structure is:
-
-LINE 1 = datetime
-LINE 2 = region/station code — IGNORE
-LINE 3 = ACTUAL SIDE ID — USE THIS
-LINE 4 = latitude — USE THIS
-LINE 5 = longitude — USE THIS
-LINE 6 = MP number — USE THIS
-
-The Side ID MUST come from line 3.
-
-Do not use the filename.
-
-Do not use MP number as Side ID.
-
-Read numeric Side IDs digit by digit.
-
-For example:
-
-6044
-
-is 6044, not 0744.
-
-Read every latitude/longitude digit exactly.
-
-Return JSON ONLY:
-
-{
-  "side_id": string or null,
-  "side_id_clear": boolean,
-  "latitude": string or null,
-  "latitude_clear": boolean,
-  "longitude": string or null,
-  "longitude_clear": boolean,
-  "mp_number": string or null
-}
-"""
 
     print(
         "   🔎 Running independent verification..."
@@ -509,12 +460,9 @@ Return JSON ONLY:
 
     t_verify = time.time()
 
-    verified, reason = _call_model_once(
+    verified, reason = extract_from_image(
         isolated_png_bytes,
-        filename,
-        0,
-        max_tokens=4000,
-        prompt_override=verification_prompt,
+        degrees=0,
     )
 
     print(
@@ -829,16 +777,13 @@ def extract_watermark(
 
             t_call = time.time()
 
-            data, reason = _call_model_once(
+            data, reason = extract_from_image(
                 raw_bytes,
-                filename,
-                deg,
-                max_tokens=4000,
-                prompt_override=RAW_CROP_PROMPT,
+                degrees=deg,
             )
 
             print(
-                f"      ⏱️ fallback model call took "
+                f"      ⏱️ fallback OCR call took "
                 f"{time.time() - t_call:.2f}s"
             )
 
