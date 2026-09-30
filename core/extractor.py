@@ -34,6 +34,8 @@ from utils.helpers import (
 
 from core.tesseract_client import extract_from_image
 
+from core.openai_client import _call_model_once, RAW_CROP_PROMPT
+
 from core.validation import validate_extraction
 
 from core.corners import (
@@ -509,6 +511,65 @@ def _verify_extraction(
 
 
 # ============================================================
+# OPENAI LAST-RESORT FALLBACK
+# ============================================================
+
+def _try_openai_fallback(image_bytes, isolated_png_bytes, filename):
+    """
+    Last resort, only reached when Tesseract could not get a valid
+    read on this image at all (isolated crop across all rotations,
+    AND the raw-crop fallback across all rotations, all failed).
+
+    This costs 1-2 OpenAI API calls -- but only for the genuinely
+    hard images where free/local OCR failed. Most images should
+    never reach this function at all.
+    """
+
+    if isolated_png_bytes:
+
+        print(
+            "   🤖 Trying OpenAI on isolated crop..."
+        )
+
+        data, reason = _call_model_once(
+            isolated_png_bytes,
+            filename,
+            0,
+            max_tokens=2000,
+        )
+
+        if data is not None and _is_good_extraction(data):
+
+            return data
+
+        print(
+            f"   ⚠️ OpenAI isolated-crop attempt failed: {reason}"
+        )
+
+    print(
+        "   🤖 Trying OpenAI on raw image (RAW_CROP_PROMPT)..."
+    )
+
+    data, reason = _call_model_once(
+        image_bytes,
+        filename,
+        0,
+        max_tokens=2000,
+        prompt_override=RAW_CROP_PROMPT,
+    )
+
+    if data is not None and _is_good_extraction(data):
+
+        return data
+
+    print(
+        f"   ⚠️ OpenAI raw-crop attempt failed: {reason}"
+    )
+
+    return None
+
+
+# ============================================================
 # MAIN EXTRACTION
 # ============================================================
 
@@ -849,6 +910,46 @@ def extract_watermark(
             )
 
             return data
+
+    # --------------------------------------------------------
+    # STAGE 3: OPENAI LAST-RESORT FALLBACK
+    #
+    # Only reached if Tesseract (isolated crop, all rotations,
+    # AND raw-crop fallback, all rotations) completely failed.
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "🤖 Tesseract fully failed — falling back to "
+        "OpenAI vision model (last resort)..."
+    )
+
+    t_stage = time.time()
+
+    openai_result = _try_openai_fallback(
+        image_bytes,
+        isolated_png_bytes,
+        filename,
+    )
+
+    print(
+        f"⏱️ OpenAI fallback total: "
+        f"{time.time() - t_stage:.2f}s"
+    )
+
+    if openai_result is not None:
+
+        print(
+            f"✅ OpenAI fallback succeeded: "
+            f"{openai_result}"
+        )
+
+        print(
+            f"⏱️ TOTAL time for {filename}: "
+            f"{time.time() - t_total_start:.2f}s"
+        )
+
+        return openai_result
 
     # --------------------------------------------------------
     # NOTHING VALID FOUND
