@@ -1,9 +1,11 @@
 import gradio_client.utils as _client_utils
 
+
+import os
+os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
 # ============================================================
 # GRADIO / PYDANTIC WORKAROUND
 # ============================================================
-
 _original_json_schema_to_python_type = (
     _client_utils._json_schema_to_python_type
 )
