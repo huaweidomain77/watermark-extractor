@@ -16,6 +16,7 @@ Important behavior:
 
 import io
 import re
+import time
 
 import cv2
 import numpy as np
@@ -396,11 +397,18 @@ def _try_rotations(
             f"   🔄 Trying rotation={deg}°"
         )
 
+        t_call = time.time()
+
         data, reason = _call_model_once(
             isolated_png_bytes,
             filename,
             deg,
             max_tokens=4000,
+        )
+
+        print(
+            f"      ⏱️ model call took "
+            f"{time.time() - t_call:.2f}s"
         )
 
         if data is None:
@@ -499,12 +507,19 @@ Return JSON ONLY:
         "   🔎 Running independent verification..."
     )
 
+    t_verify = time.time()
+
     verified, reason = _call_model_once(
         isolated_png_bytes,
         filename,
         0,
         max_tokens=4000,
         prompt_override=verification_prompt,
+    )
+
+    print(
+        f"      ⏱️ verification call took "
+        f"{time.time() - t_verify:.2f}s"
     )
 
     if verified is None:
@@ -577,6 +592,8 @@ def extract_watermark(
         Repeated Side IDs are allowed.
     """
 
+    t_total_start = time.time()
+
     print()
     print(
         f"=================================================="
@@ -591,6 +608,8 @@ def extract_watermark(
     # --------------------------------------------------------
     # STAGE 1: WATERMARK CORNER
     # --------------------------------------------------------
+
+    t_stage = time.time()
 
     try:
 
@@ -617,9 +636,16 @@ def extract_watermark(
 
         corner = None
 
+    print(
+        f"⏱️ corner detection: "
+        f"{time.time() - t_stage:.2f}s"
+    )
+
     # --------------------------------------------------------
     # STAGE 1A: ISOLATE WATERMARK
     # --------------------------------------------------------
+
+    t_stage = time.time()
 
     isolated_png_bytes = None
 
@@ -653,6 +679,11 @@ def extract_watermark(
                 f"⚠️ Watermark isolation failed: {e}"
             )
 
+    print(
+        f"⏱️ isolation: "
+        f"{time.time() - t_stage:.2f}s"
+    )
+
     # --------------------------------------------------------
     # STAGE 1B: EXTRACT
     # --------------------------------------------------------
@@ -673,6 +704,8 @@ def extract_watermark(
 
             pass
 
+        t_stage = time.time()
+
         try:
 
             coarse_angle = estimate_watermark_angle(
@@ -687,10 +720,22 @@ def extract_watermark(
             f"   coarse angle={coarse_angle}°"
         )
 
+        print(
+            f"⏱️ angle estimation: "
+            f"{time.time() - t_stage:.2f}s"
+        )
+
+        t_stage = time.time()
+
         result = _try_rotations(
             isolated_png_bytes,
             filename,
             coarse_angle,
+        )
+
+        print(
+            f"⏱️ rotation attempts total: "
+            f"{time.time() - t_stage:.2f}s"
         )
 
         if result is not None:
@@ -723,6 +768,11 @@ def extract_watermark(
                     f"{result}"
                 )
 
+                print(
+                    f"⏱️ TOTAL time for {filename}: "
+                    f"{time.time() - t_total_start:.2f}s"
+                )
+
                 return result
 
     # --------------------------------------------------------
@@ -733,6 +783,8 @@ def extract_watermark(
     print(
         "🔁 Starting raw-crop fallback..."
     )
+
+    t_stage = time.time()
 
     fallback_attempts = []
 
@@ -775,12 +827,19 @@ def extract_watermark(
 
         for deg in candidates:
 
+            t_call = time.time()
+
             data, reason = _call_model_once(
                 raw_bytes,
                 filename,
                 deg,
                 max_tokens=4000,
                 prompt_override=RAW_CROP_PROMPT,
+            )
+
+            print(
+                f"      ⏱️ fallback model call took "
+                f"{time.time() - t_call:.2f}s"
             )
 
             if data is None:
@@ -834,6 +893,16 @@ def extract_watermark(
                 f"{data}"
             )
 
+            print(
+                f"⏱️ fallback total: "
+                f"{time.time() - t_stage:.2f}s"
+            )
+
+            print(
+                f"⏱️ TOTAL time for {filename}: "
+                f"{time.time() - t_total_start:.2f}s"
+            )
+
             return data
 
     # --------------------------------------------------------
@@ -843,6 +912,11 @@ def extract_watermark(
     print(
         f"❌ Could not obtain a valid extraction "
         f"for {filename}"
+    )
+
+    print(
+        f"⏱️ TOTAL time for {filename}: "
+        f"{time.time() - t_total_start:.2f}s"
     )
 
     return {

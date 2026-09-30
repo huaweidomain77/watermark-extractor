@@ -1078,7 +1078,7 @@ body,
     font-family: 'Work Sans', sans-serif !important;
 }
 
-.gradio-container {
+ .gradio-container {
     max-width: 100% !important;
     padding: 0 !important;
 }
